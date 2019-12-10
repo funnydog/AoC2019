@@ -206,35 +206,30 @@ struct asteroid *vaporize(struct map *m, struct asteroid *p)
 	struct asteroid **tail = &head;
 
 	size_t i = 0;
-	size_t vcount = count;
-	while (vcount)
+	size_t left_intact = count;
+	while (left_intact)
 	{
-		struct asteroid *q;
-		do
+		/* find the asteroid to vaporize */
+		struct asteroid *q = arr[i];
+		while (q->vaporized)
 		{
-			q = arr[i++];
-			if (i >= count)
-			{
-				i = 0;
-				continue;
-			}
-		} while (q->vaporized);
+			i = (i + 1) % count;
+			q = arr[i];
+		}
 
+		/* vaporize it */
 		q->vaporized = 1;
 		q->nvap = NULL;
-		vcount--;
+		left_intact--;
 
 		*tail = q;
 		tail = &q->nvap;
 
+		/* skip the asteroids shadowed by the vaporized one */
 		double angle = -atan2(q->x, q->y);
-		while (i < count && angle == -atan2(arr[i]->x, arr[i]->y))
+		while (angle == -atan2(arr[i]->x, arr[i]->y))
 		{
-			i++;
-		}
-		if (i >= count)
-		{
-			i = 0;
+			i = (i + 1) % count;
 		}
 	}
 	free(arr);
