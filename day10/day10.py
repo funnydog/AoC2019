@@ -48,7 +48,7 @@ def best(table):
 
     return bestpoint, maxcount
 
-def vaporize(asteroids, width, height, p):
+def vaporize(asteroids, p):
     asteroids.remove(p)
 
     dist = lambda p: p[0]*p[0]+p[1]*p[1]
@@ -129,7 +129,7 @@ table = """.#..##.###...#######
 #.#.#.#####.####.###
 ###.##.####.##.#..##""".split("\n")
 assert best(table) == ((11,13), 210)
-arr = vaporize(asteroids(table), len(table[0]), len(table), (11, 13))
+arr = vaporize(asteroids(table), (11, 13))
 assert arr[0] == (11,12), arr[0]
 assert arr[1] == (12, 1), arr[1]
 assert arr[2] == (12, 2), arr[2]
@@ -147,5 +147,5 @@ with open("input", "rt") as file:
 
 p, count = best(table)
 print("part1:", count)
-arr = vaporize(asteroids(table), len(table[0]), len(table), p)
+arr = vaporize(asteroids(table), p)
 print("part2:", arr[199][0]*100 + arr[199][1])
