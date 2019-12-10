@@ -156,11 +156,17 @@ int acmp(const void *a, const void *b)
 	double pr = -atan2(p->x, p->y);
 	double qr = -atan2(q->x, q->y);
 	if (pr < qr)
+	{
 		return -1;
+	}
 	else if (pr > qr)
+	{
 		return +1;
+	}
 	else
-		return p->x*p->x + p->y*p->y < q->x*q->x + q->y*q->y;
+	{
+		return p->x*p->x + p->y*p->y - q->x*q->x + q->y*q->y;
+	}
 }
 
 struct asteroid **sorted_vectors(struct map *m, struct asteroid *q)
