@@ -17,27 +17,33 @@ def load_moons(text):
             moons.append(Moon([int(x) for x in m.groups()]))
     return moons
 
-def update_step(moons, axis):
+def update_step(pos, vel, length):
     # update the velocity
-    for i in range(len(moons)):
-        for j in range(i+1, len(moons)):
-            if moons[i].pos[axis] < moons[j].pos[axis]:
-                moons[i].vel[axis] += 1
-                moons[j].vel[axis] -= 1
-            elif moons[i].pos[axis] > moons[j].pos[axis]:
-                moons[i].vel[axis] -= 1
-                moons[j].vel[axis] += 1
+    for i in range(length):
+        for j in range(i+1, length):
+            if pos[i] < pos[j]:
+                vel[i] += 1
+                vel[j] -= 1
+            elif pos[i] > pos[j]:
+                vel[i] -= 1
+                vel[j] += 1
             else:
                 pass
 
     # update the position
-    for m in moons:
-        m.pos[axis] += m.vel[axis]
+    for i in range(length):
+        pos[i] += vel[i]
 
 def energy(moons, steps):
     for axis in range(3):
+        pos = [m.pos[axis] for m in moons]
+        vel = [m.vel[axis] for m in moons]
         for i in range(steps):
-            update_step(moons, axis)
+            update_step(pos, vel, len(moons))
+
+        for i in range(len(moons)):
+            moons[i].pos[axis] = pos[i]
+            moons[i].vel[axis] = vel[i]
 
     energy = 0
     for m in moons:
@@ -50,18 +56,16 @@ def energy(moons, steps):
 def repeat_axis(moons, axis):
     pos = [m.pos[axis] for m in moons]
     vel = [m.vel[axis] for m in moons]
+    orig_pos = tuple(pos)
+    orig_vel = tuple(vel)
 
+    length = len(moons)
     count = 0
     while True:
-        update_step(moons, axis)
+        update_step(pos, vel, length)
         count += 1
 
-        exit = True
-        for i, m in enumerate(moons):
-            if m.pos[axis] != pos[i] or m.vel[axis] != vel[i]:
-                exit = False
-                break
-        if exit:
+        if tuple(pos) == orig_pos and tuple(vel) == orig_vel:
             break
 
     return count
