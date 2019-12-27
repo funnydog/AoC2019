@@ -353,20 +353,17 @@ static void map_dfs(struct map *map, int x, int y, int value)
 		int r = module_pop_output(map->m);
 		if (r == WALL)
 		{
-			/* nothing to do */
+			continue;
 		}
-		else
-		{
-			if (!map_find(map, x + dx[i], y + dy[i]))
-			{
-				map_dfs(map, x+dx[i], y + dy[i], r);
-			}
-			module_push_input(map->m, back[i]);
-			module_execute(map->m);
-			module_pop_output(map->m);
-		}
-	}
 
+		if (!map_find(map, x+dx[i], y+dy[i]))
+		{
+			map_dfs(map, x+dx[i], y+dy[i], r);
+		}
+		module_push_input(map->m, back[i]);
+		module_execute(map->m);
+		module_pop_output(map->m);
+	}
 }
 
 static void map_discover(struct map *map, const int64_t *program, size_t size)
@@ -381,6 +378,15 @@ static void map_discover(struct map *map, const int64_t *program, size_t size)
 
 static void map_bfs(struct map *map, struct point *start)
 {
+	for (int i = 0; i < TABLE_SIZE; i++)
+	{
+		for (struct point *p = map->table[i];
+		     p;
+		     p = p->next)
+		{
+			p->d = 0;
+		}
+	}
 	struct point *fifo[64];
 	size_t fr = 0, fw = 0;
 	map->maxd = start->d = 0;
@@ -404,21 +410,6 @@ static void map_bfs(struct map *map, struct point *start)
 			}
 		}
 	}
-}
-
-static int map_oxyfill(struct map *m, struct point *start)
-{
-	for (int i = 0; i < TABLE_SIZE; i++)
-	{
-		for (struct point *p = m->table[i];
-		     p;
-		     p = p->next)
-		{
-			p->d = 0;
-		}
-	}
-	map_bfs(m, start);
-	return m->maxd;
 }
 
 int main(int argc, char *argv[])
@@ -464,7 +455,8 @@ int main(int argc, char *argv[])
 	map_print(&m);
 	map_bfs(&m, m.start);
 	printf("part1: %d\n", m.oxygen->d);
-	printf("part2: %d\n", map_oxyfill(&m, m.oxygen));
+	map_bfs(&m, m.oxygen);
+	printf("part2: %d\n", m.maxd);
 	map_destroy(&m);
 	return 0;
 }
