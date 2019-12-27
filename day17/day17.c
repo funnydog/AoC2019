@@ -57,15 +57,7 @@ static void module_free(struct module *m)
 
 static struct module *module_new(void)
 {
-	struct module *m = calloc(1, sizeof(*m));
-	if (m)
-	{
-		m->ram = NULL;
-		m->size = 0;
-		m->pc = 0;
-		m->ri = m->wi = m->ro = m->wo = 0;
-	}
-	return m;
+	return calloc(1, sizeof(struct module));
 }
 
 static int64_t address_of(struct module *m, int64_t pos, int mode)
