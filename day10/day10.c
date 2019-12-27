@@ -31,7 +31,7 @@ struct asteroid *map_find(struct map *m, int x, int y)
 {
 	unsigned pos = hashfn(x, y) & (TABLE_SIZE-1);
 	struct asteroid *n = m->table[pos];
-	while (n && n->x != x && n->y != y)
+	while (n && !(n->x == x && n->y == y))
 	{
 		n = n->next;
 	}
@@ -41,14 +41,9 @@ struct asteroid *map_find(struct map *m, int x, int y)
 struct asteroid *map_add(struct map *m, int x, int y)
 {
 	unsigned pos = hashfn(x, y) & (TABLE_SIZE-1);
-	struct asteroid *n = m->table[pos];
-	while (n && n->x != x && n->y != y)
+	struct asteroid *n = calloc(1, sizeof(*n));
+	if (n)
 	{
-		n = n->next;
-	}
-	if (!n)
-	{
-		n = calloc(1, sizeof(*n));
 		n->x = x;
 		n->y = y;
 		n->next = m->table[pos];

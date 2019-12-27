@@ -283,7 +283,7 @@ static int hull_get(struct hull *h, int x, int y, int *value)
 {
 	unsigned pos = hashfn(x, y) & (TABLE_SIZE-1);
 	struct panel *p = h->table[pos];
-	while (p && p->x != x && p->y != y)
+	while (p && !(p->x == x && p->y == y))
 	{
 		p = p->next;
 	}
@@ -302,7 +302,7 @@ static void hull_set(struct hull *h, int x, int y, int value)
 {
 	unsigned pos = hashfn(x, y) & (TABLE_SIZE-1);
 	struct panel *p = h->table[pos];
-	while (p && p->x != x && p->y != y)
+	while (p && !(p->x == x && p->y == y))
 	{
 		p = p->next;
 	}

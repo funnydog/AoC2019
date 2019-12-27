@@ -275,7 +275,7 @@ static struct point *map_find(struct map *m, int x, int y)
 {
 	unsigned pos = hashfn(x, y) & (TABLE_SIZE-1);
 	struct point *p = m->table[pos];
-	while (p && p->x != x && p->y != y)
+	while (p && !(p->x == x && p->y == y))
 	{
 		p = p->next;
 	}
