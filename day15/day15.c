@@ -52,25 +52,45 @@ static void module_free(struct module *m)
 		free(m);
 	}
 }
-
-static struct module *module_new(size_t msize)
+static struct module *module_new(void)
 {
-	struct module *m = calloc(1, sizeof(*m));
-	if (m)
+	return calloc(1, sizeof(struct module));
+}
+
+static int64_t address_of(struct module *m, int64_t pos, int mode)
+{
+	while ((size_t)pos >= m->size)
 	{
-		m->ram = calloc(msize, sizeof(m->ram[0]));
-		m->size = msize;
-		m->pc = 0;
-		m->ri = m->wi = m->ro = m->wo = 0;
+		size_t nsize = m->size ? m->size * 2 : 1024;
+		int64_t *nram = realloc(m->ram, nsize * sizeof(*nram));
+		assert(nram);
+
+		/* NOTE: realloc() doesn't guarantee that the added
+		 * memory is zeroed. */
+		memset(nram+m->size, 0, nsize - m->size);
+		m->size = nsize;
+		m->ram = nram;
 	}
-	return m;
+
+	switch(mode)
+	{
+	case IMODE: return pos;
+	case PMODE: return address_of(m, m->ram[pos], IMODE);
+	case RMODE: return address_of(m, m->rbp + m->ram[pos], IMODE);
+	default:
+		fprintf(stderr, "Unknown addressing mode: %d\n", mode);
+		abort();
+	}
 }
 
 static void module_load(struct module *m, const int64_t *prog, size_t psize)
 {
-	assert(psize < m->size);
-	memset(m->ram, 0, m->size * sizeof(m->ram[0]));
+	/* NOTE: forces a reallocation */
+	address_of(m, psize, IMODE);
+
+	/* reset the memory and copy the program */
 	memcpy(m->ram, prog, psize * sizeof(m->ram[0]));
+	memset(m->ram+psize, 0, (m->size-psize) * sizeof(m->ram[0]));
 	m->pc = 0;
 	m->rbp = 0;
 	m->ri = m->wi = m->ro = m->wo = 0;
@@ -86,20 +106,6 @@ static int64_t module_pop_output(struct module *m)
 {
 	assert(m->wo != m->ro);
 	return m->outq[(m->ro++) & 31];
-}
-
-static int64_t address_of(struct module *m, int64_t pos, int mode)
-{
-	assert(pos >= 0 && (size_t)pos < m->size);
-	switch(mode)
-	{
-	case IMODE: return pos;
-	case PMODE: return m->ram[pos];
-	case RMODE: return m->rbp + m->ram[pos];
-	default:
-		fprintf(stderr, "Unknown addressing mode: %d\n", mode);
-		abort();
-	}
 }
 
 static int module_execute(struct module *m)
@@ -365,7 +371,7 @@ static void map_dfs(struct map *map, int x, int y, int value)
 
 static void map_discover(struct map *map, const int64_t *program, size_t size)
 {
-	map->m = module_new(4096);
+	map->m = module_new();
 	module_load(map->m, program, size);
 	map_dfs(map, 0, 0, FREE);
 	map->start = map_find(map, 0, 0);
