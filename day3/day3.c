@@ -58,10 +58,8 @@ static struct cell *map_get(struct map *m, int x, int y)
 {
 	unsigned idx = hash(x, y) % SIZE;
 	struct cell *c = m->table[idx];
-	while (c)
+	while (c && !(c->x == x && c->y == y))
 	{
-		if (c->x == x && c->y == y)
-			break;
 		c = c->next;
 	}
 	if (c == NULL)

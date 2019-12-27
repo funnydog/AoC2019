@@ -34,11 +34,11 @@ static struct node *find(const char *name)
 {
 	unsigned pos = hashfn(name) % TABLE_SIZE;
 	struct node *n = table[pos];
-	while (n != NULL && strcmp(n->name, name) != 0)
+	while (n && strcmp(n->name, name) != 0)
 	{
 		n = n->next;
 	}
-	if (n == NULL)
+	if (!n)
 	{
 		n = calloc(1, sizeof(*n));
 		strcpy(n->name, name);
