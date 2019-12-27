@@ -228,6 +228,33 @@ static int module_execute(struct module *m)
 	}
 }
 
+static int64_t *program_load(FILE *input, size_t *count)
+{
+	int64_t *array = NULL;
+	size_t acount = 0;
+	size_t asize = 0;
+
+	int64_t value;
+	while (fscanf(input, "%" SCNd64 ",", &value) == 1)
+	{
+		if (acount == asize)
+		{
+			size_t newsize = asize ? asize * 2 : 32;
+			int64_t *newarray = realloc(array, newsize * sizeof(*newarray));
+			if (!newarray)
+			{
+				free(array);
+				return NULL;
+			}
+			asize = newsize;
+			array = newarray;
+		}
+		array[acount++] = value;
+	}
+	*count = acount;
+	return array;
+}
+
 #define TABLE_SIZE 1024
 
 enum
@@ -427,36 +454,21 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	int64_t *array = NULL;
-	size_t acount = 0;
-	size_t asize = 0;
-
-	int64_t value;
-	while (fscanf(input, "%" SCNd64 ",", &value) == 1)
-	{
-		if (acount == asize)
-		{
-			size_t newsize = asize ? asize * 2 : 32;
-			int64_t *newarray = realloc(array, newsize * sizeof(*newarray));
-			if (!newarray)
-			{
-				abort();
-			}
-			asize = newsize;
-			array = newarray;
-		}
-		array[acount++] = value;
-	}
+	size_t pcount;
+	int64_t *program = program_load(input, &pcount);
 	fclose(input);
 
 	struct map m = {};
-	map_discover(&m, array, acount);
-	free(array);
+	map_discover(&m, program, pcount);
+	free(program);
+
 	map_print(&m);
 	map_bfs(&m, m.start);
 	printf("part1: %d\n", m.oxygen->d);
+
 	map_bfs(&m, m.oxygen);
 	printf("part2: %d\n", m.maxd);
+
 	map_destroy(&m);
 	return 0;
 }
