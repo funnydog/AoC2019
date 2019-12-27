@@ -247,21 +247,25 @@ int main(int argc, char *argv[])
 	}
 
 	struct map m = {};
-	char *line = NULL;
-	size_t size = 0;
 	int y = 0;
-	while (getline(&line, &size, input) != -1)
+	int x = 0;
+	int c;
+	while ((c = getc(input)) != EOF)
 	{
-		for (int x = 0; line[x]; x++)
+		if (c == '\n')
 		{
-			if (line[x] == '#')
+			x = 0;
+			y++;
+		}
+		else
+		{
+			if (c == '#')
 			{
 				map_add(&m, x, y);
 			}
+			x++;
 		}
-		y++;
 	}
-	free(line);
 	fclose(input);
 
 	struct asteroid *best = best_position(&m);
