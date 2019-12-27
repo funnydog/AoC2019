@@ -228,8 +228,6 @@ static int module_execute(struct module *m)
 	}
 }
 
-#define TABLE_SIZE 1024
-
 struct game
 {
 	char screen[100][100];
