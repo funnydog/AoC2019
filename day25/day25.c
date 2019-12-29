@@ -171,31 +171,26 @@ static int module_execute(struct module *m)
 			{
 				return INPUT_EMPTY;
 			}
-			b = m->inq[(m->ri++) & 31];
-			m->ram[a] = b;
+			m->ram[a] = m->inq[(m->ri++) & 31];
 			m->pc += 2;
-			if (m->output && 0 <= b && b < 256)
+			if (m->output && 0 <= m->ram[a] && m->ram[a] < 256)
 			{
-				putc(b, m->output);
+				putc(m->ram[a], m->output);
 			}
 			break;
 
 		case OP_OUT:
 			a = address_of(m, m->pc+1, a_mode);
-			b = m->ram[a];
-			if (m->wo - m->ro < 32)
-			{
-				m->outq[(m->wo++) & 31] = b;
-				if (m->output && 0 <= b && b < 256)
-				{
-					putc(b, m->output);
-				}
-			}
-			else
+			if (m->wo - m->ro == 32)
 			{
 				return OUTPUT_FULL;
 			}
+			m->outq[(m->wo++) & 31] = m->ram[a];
 			m->pc += 2;
+			if (m->output && 0 <= m->ram[a] && m->ram[a] < 256)
+			{
+				putc(m->ram[a], m->output);
+			}
 			break;
 
 		case OP_JNZ:

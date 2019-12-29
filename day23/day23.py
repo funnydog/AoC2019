@@ -2,6 +2,8 @@
 
 from collections import deque, defaultdict
 
+import sys
+
 ADD  = 1                        # add [a], [b] into [c]
 MUL  = 2                        # mul [a], [b] into [c]
 IN   = 3                        # read stdin and store to a
@@ -29,6 +31,7 @@ class Module(object):
         self.input = deque()
         self.output = deque()
         self.snapshot = None
+        self.logfile = None
 
     def load(self, program):
         self.ram.clear()
@@ -38,6 +41,9 @@ class Module(object):
         self.rbp = 0
         self.input.clear()
         self.output.clear()
+
+    def log(self, f):
+        self.logfile = f
 
     def push_input(self, data):
         self.input.append(data)
@@ -80,15 +86,19 @@ class Module(object):
             elif op == IN:
                 a = self.address_of(self.pc+1, a_mode)
 
-                if self.input:
-                    self.ram[a] = self.input.popleft()
-                    self.pc += 2
-                else:
+                if not self.input:
                     return WAITING
+
+                self.ram[a] = self.input.popleft()
+                self.pc += 2
+                if self.logfile and 0 <= self.ram[a] < 256:
+                    self.logfile.write(chr(self.ram[a]))
             elif op == OUT:
                 a = self.address_of(self.pc+1, a_mode)
                 self.pc += 2
                 self.output.append(self.ram[a])
+                if self.logfile and 0 <= self.ram[a] < 256:
+                    self.logfile.write(chr(self.ram[a]))
                 if self.ram[a] == ord("\n"):
                     return WAITING
             elif op == JNZ:

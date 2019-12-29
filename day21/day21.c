@@ -103,10 +103,6 @@ static void module_load(struct module *m, const int64_t *prog, size_t psize)
 static void module_push_input(struct module *m, int64_t value)
 {
 	assert(m->wi - m->ri < 32);
-	if (m->output && 0 <= value && value < 256)
-	{
-		putc(value, m->output);
-	}
 	m->inq[(m->wi++) & 31] = value;
 }
 
@@ -118,12 +114,7 @@ static int module_input_full(struct module *m)
 static int64_t module_pop_output(struct module *m)
 {
 	assert(m->wo != m->ro);
-	int64_t value = m->outq[(m->ro++) & 31];
-	if (m->output && 0 <= value && value < 256)
-	{
-		putc(value, m->output);
-	}
-	return value;
+	return m->outq[(m->ro++) & 31];
 }
 
 static int module_output_empty(struct module *m)
@@ -131,7 +122,7 @@ static int module_output_empty(struct module *m)
 	return m->ro == m->wo;
 }
 
-static void module_dump(struct module *m, FILE *out)
+static void module_log(struct module *m, FILE *out)
 {
 	m->output = out;
 }
@@ -180,19 +171,24 @@ static int module_execute(struct module *m)
 			}
 			m->ram[a] = m->inq[(m->ri++) & 31];
 			m->pc += 2;
+			if (m->output && 0 <= m->ram[a] && m->ram[a] < 256)
+			{
+				putc(m->ram[a], m->output);
+			}
 			break;
 
 		case OP_OUT:
 			a = address_of(m, m->pc+1, a_mode);
-			if (m->wo - m->ro < 32)
-			{
-				m->outq[(m->wo++) & 31] = m->ram[a];
-			}
-			else
+			if (m->wo - m->ro == 32)
 			{
 				return OUTPUT_FULL;
 			}
+			m->outq[(m->wo++) & 31] = m->ram[a];
 			m->pc += 2;
+			if (m->output && 0 <= m->ram[a] && m->ram[a] < 256)
+			{
+				putc(m->ram[a], m->output);
+			}
 			break;
 
 		case OP_JNZ:
@@ -340,10 +336,10 @@ int main(int argc, char *argv[])
 
 	struct module *m = module_new();
 	module_load(m, program, pcount);
-#ifdef DUMP_OUTPUT
-	module_dump(m, stdout);
+#ifdef ECHO
+	module_log(m, stdout);
 #else
-	(void)module_dump;
+	(void)module_log;
 #endif
 
 	const char *script1 =

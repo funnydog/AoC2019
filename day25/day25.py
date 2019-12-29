@@ -32,9 +32,6 @@ class Module(object):
         self.snapshot = None
         self.logfile = None
 
-    def log(self, f):
-        self.logfile = f
-
     def load(self, program):
         self.ram.clear()
         for p,v in enumerate(program):
@@ -43,6 +40,9 @@ class Module(object):
         self.rbp = 0
         self.input.clear()
         self.output.clear()
+
+    def log(self, f):
+        self.logfile = f
 
     def push_input(self, data):
         self.input.append(data)
@@ -85,18 +85,18 @@ class Module(object):
             elif op == IN:
                 a = self.address_of(self.pc+1, a_mode)
 
-                if self.input:
-                    self.ram[a] = self.input.popleft()
-                    self.pc += 2
-                    if self.logfile:
-                        self.logfile.write(chr(self.ram[a]))
-                else:
+                if not self.input:
                     return WAITING
+
+                self.ram[a] = self.input.popleft()
+                self.pc += 2
+                if self.logfile and 0 <= self.ram[a] < 256:
+                    self.logfile.write(chr(self.ram[a]))
             elif op == OUT:
                 a = self.address_of(self.pc+1, a_mode)
                 self.pc += 2
                 self.output.append(self.ram[a])
-                if self.logfile:
+                if self.logfile and 0 <= self.ram[a] < 256:
                     self.logfile.write(chr(self.ram[a]))
                 if self.ram[a] == ord("\n"):
                     return WAITING
@@ -347,4 +347,5 @@ with open("input", "rt") as file:
 m = Map(program)
 m.discover()
 m.solve()
-m.dot("file.dot")
+if len(sys.argv) > 1:
+    m.dot(sys.argv[1])

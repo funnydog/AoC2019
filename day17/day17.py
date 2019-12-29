@@ -2,6 +2,8 @@
 
 from collections import deque, defaultdict
 
+import sys
+
 ADD  = 1                        # add [a], [b] into [c]
 MUL  = 2                        # mul [a], [b] into [c]
 IN   = 3                        # read stdin and store to a
@@ -29,6 +31,7 @@ class Module(object):
         self.input = deque()
         self.output = deque()
         self.snapshot = None
+        self.logfile = None
 
     def load(self, program):
         self.ram = program[:]
@@ -37,6 +40,9 @@ class Module(object):
         self.rbp = 0
         self.input.clear()
         self.output.clear()
+
+    def log(self, f):
+        self.logfile = f
 
     def push_input(self, data):
         self.input.append(data)
@@ -79,16 +85,19 @@ class Module(object):
             elif op == IN:
                 a = self.address_of(self.pc+1, a_mode)
 
-                if self.input:
-                    self.ram[a] = self.input.popleft()
-                    self.pc += 2
-                else:
+                if not self.input:
                     return WAITING
+                self.ram[a] = self.input.popleft()
+                self.pc += 2
+                if self.logfile and 0 <= self.ram[a] < 256:
+                    self.logfile.write(chr(self.ram[a]))
             elif op == OUT:
                 a = self.address_of(self.pc+1, a_mode)
                 self.pc += 2
                 self.output.append(self.ram[a])
-                if self.ram[a] == ord("\n"):
+                if self.logfile and 0 <= self.ram[a] < 256:
+                    self.logfile.write(chr(self.ram[a]))
+                if self.ram[a] == 10:
                     return WAITING
             elif op == JNZ:
                 a = self.address_of(self.pc+1, a_mode)
@@ -149,9 +158,10 @@ class Map(object):
         self.max_distance = 0
         self.startpos = None
         self.startdir = None
-        self.module = Module(65536)
-        self.echo = echo
         self.height = None
+        self.module = Module(65536)
+        if echo:
+            self.module.log(sys.stdout)
 
     def discover(self, program):
         self.module.load(program)
@@ -166,8 +176,6 @@ class Map(object):
             else:
                 self.points[(x, y)] = v
                 x += 1
-            if self.echo:
-                print(v, end="")
         self.height = y
 
     def is_intersection(self, point):
@@ -226,38 +234,26 @@ class Map(object):
         self.module.execute()
         while self.module.output:
             v = self.module.pop_output()
-            if self.echo:
-                print(chr(v), end="")
 
         # NOTE: main movement routine i.e. commands
         cmd = ",".join(command)+"\n"
-        if self.echo:
-            print(cmd, end="")
         for v in cmd:
             self.module.push_input(ord(v))
         self.module.execute()
         while self.module.output:
             v = self.module.output.popleft()
-            if self.echo:
-                print(chr(v), end="")
 
         # NOTE: movements functions i.e. patterns
         for p in "ABC":
             cmd = ",".join(patterns[p]) + "\n"
-            if self.echo:
-                print(cmd, end="")
             for v in cmd:
                 self.module.push_input(ord(v))
             self.module.execute()
             while self.module.output:
                 v = self.module.pop_output()
-                if self.echo:
-                    print(chr(v), end="")
 
         # NOTE: disable continuous video feed
         cmd = "n\n"
-        if self.echo:
-            print(cmd, end="")
         for v in cmd:
             self.module.push_input(ord(v))
 
@@ -266,14 +262,7 @@ class Map(object):
             self.module.execute()
             while self.module.output:
                 v = self.module.pop_output()
-                if v < 256 and self.echo:
-                    print(chr(v), end="")
-                    if v == ord("\n"):
-                        y += 1
-                    if y == self.height:
-                        y = 0
-                        print("\033[{}A".format(self.height), end="")
-                elif v > 255:
+                if v >= 256:
                     return v
 
         return 0
@@ -340,7 +329,6 @@ m = Map(False)
 m.discover(program)
 print("part1:", m.alignment())
 mypath = m.path()
-print(len(mypath), ",".join(mypath))
+
 command, patterns = build_patterns(mypath)
-print(patterns)
 print("part2:", m.reprogram(program, command, patterns))
