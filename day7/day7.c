@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "perm.h"
-#include "queue.h"
 
 enum
 {
@@ -21,8 +20,9 @@ enum
 	PMODE = 0,
 	IMODE = 1,
 
-	WAITING = 0,
-	HALTED = 1,
+	INPUT_EMPTY = 0,
+	OUTPUT_FULL = 1,
+	HALTED = 2,
 };
 
 struct module
@@ -31,8 +31,11 @@ struct module
 	size_t size;
 	int pc;
 
-	struct queue input;
-	struct queue *output;
+	int inq[32];
+	unsigned ri, wi;
+
+	int outq[32];
+	unsigned ro, wo;
 };
 
 static void module_free(struct module *m)
@@ -56,11 +59,6 @@ static struct module *module_new(const int *ram, size_t size)
 		}
 		m->size = size;
 		m->pc = 0;
-		m->input.r = m->input.w = 0;
-		if (m->output)
-		{
-			m->output->r = m->output->w = 0;
-		}
 	}
 	return m;
 }
@@ -73,18 +71,28 @@ static void module_reset(struct module *m, const int *ram, size_t size)
 		m->ram = newarr;
 		m->size = size;
 		memcpy(m->ram, ram, size * sizeof(*ram));
-		m->pc = 0;
+		m->pc = m->ri = m->wi = m->ro = m->wo = 0;
 	}
 }
 
-static void module_pipe(struct module *m, struct module *other)
+static void module_push_input(struct module *m, int value)
 {
-	m->output = &other->input;
+	m->inq[(m->wi++)&31] = value;
 }
 
-static void module_pushinput(struct module *m, int value)
+static int module_input_full(struct module *m)
 {
-	queue_add(&m->input, value);
+	return m->ri + 32 == m->wi;
+}
+
+static int module_pop_output(struct module *m)
+{
+	return m->outq[(m->ro++)&31];
+}
+
+static int module_output_empty(struct module *m)
+{
+	return m->ro == m->wo;
 }
 
 static int address_of(struct module *m, int pos, int mode)
@@ -132,27 +140,24 @@ static int module_execute(struct module *m)
 			break;
 
 		case OP_IN:
+			if (m->ri == m->wi)
+			{
+				return INPUT_EMPTY;
+			}
 			a = address_of(m, m->pc+1, a_mode);
 			assert(a_mode == PMODE);
-			if (queue_empty(&m->input))
-			{
-				return WAITING;
-			}
-			m->ram[a] = queue_pop(&m->input);
+			m->ram[a] = m->inq[(m->ri++)&31];
 			m->pc += 2;
 			break;
 
 		case OP_OUT:
+			if (m->ro+32 == m->wo)
+			{
+				return OUTPUT_FULL;
+			}
 			a = address_of(m, m->pc+1, a_mode);
-			if (m->output && !queue_full(m->output))
-			{
-				queue_add(m->output, m->ram[a]);
-			}
-			else
-			{
-				fprintf(stderr, "output discarded %d\n", m->ram[a]);
-			}
 			m->pc += 2;
+			m->outq[(m->wo++)&31] = m->ram[a];
 			break;
 
 		case OP_JNZ:
@@ -209,45 +214,15 @@ static int module_execute(struct module *m)
 	}
 }
 
-static struct module **wire_modules(const int *ram, size_t size)
+static int signal(const int *program, size_t pcount, int *sarr, size_t count)
 {
-	struct module **m = calloc(5, sizeof(*m));
-	for (int i = 0; i < 5; i++)
-	{
-		m[i] = module_new(ram, size);
-		if (i > 0)
-		{
-			module_pipe(m[i-1], m[i]);
-		}
-	}
-	module_pipe(m[4], m[0]);
-	return m;
-}
-
-static void reset_modules(struct module **ma, const int *ram, size_t size)
-{
-	for (int i = 0; i < 5; i++)
-	{
-		module_reset(ma[i], ram, size);
-	}
-}
-
-static void destroy_modules(struct module **marr)
-{
-	for (int i = 0; i < 5; i++)
-	{
-		module_free(marr[i]);
-	}
-	free(marr);
-}
-
-static int signal(struct module **marr, int *sarr, size_t count)
-{
+	struct module *m[5];
 	for (size_t i = 0; i < count; i++)
 	{
-		module_pushinput(marr[i], sarr[i]);
+		m[i] = module_new(program, pcount);
+		module_push_input(m[i], sarr[i]);
 	}
-	module_pushinput(marr[0], 0);
+	module_push_input(m[0], 0);
 
 	int exit;
 	do
@@ -255,15 +230,28 @@ static int signal(struct module **marr, int *sarr, size_t count)
 		exit = 1;
 		for (size_t i = 0; i < count; i++)
 		{
-			exit &= module_execute(marr[i]) != WAITING;
-		}
-	} while (!exit);
+			exit &= module_execute(m[i]) == HALTED;
 
-	return queue_pop(marr[count-1]->output);
+			size_t j = (i + 1) % count;
+			module_push_input(m[j], module_pop_output(m[i]));
+		}
+	} while(!exit);
+
+	int result = m[0]->inq[m[0]->ri];
+	for (size_t i = 0; i < count; i++)
+	{
+		module_free(m[i]);
+	}
+
+	return result;
 }
 
 int main(int argc, char *argv[])
 {
+	(void)module_reset;
+	(void)module_input_full;
+	(void)module_output_empty;
+
 	if (argc < 2)
 	{
 		fprintf(stderr, "Usage: %s <input>\n", argv[0]);
@@ -277,12 +265,10 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	struct module **ma = wire_modules(NULL, 0);
 	{
 		int ram[] = {3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0};
 		int sequence[] = {4, 3, 2, 1, 0};
-		reset_modules(ma, ram, sizeof(ram)/sizeof(ram[0]));
-		assert(signal(ma, sequence, 5) == 43210);
+		assert(signal(ram, sizeof(ram)/sizeof(ram[0]), sequence, 5) == 43210);
 	}
 
 	{
@@ -291,8 +277,7 @@ int main(int argc, char *argv[])
 			101,5,23,23,1,24,23,23,4,23,99,0,0
 		};
 		int sequence[] = {0, 1, 2, 3, 4};
-		reset_modules(ma, ram, sizeof(ram)/sizeof(ram[0]));
-		assert(signal(ma, sequence, 5) == 54321);
+		assert(signal(ram, sizeof(ram)/sizeof(ram[0]), sequence, 5) == 54321);
 	}
 
 	{
@@ -301,8 +286,7 @@ int main(int argc, char *argv[])
 			1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0
 		};
 		int sequence[] = {1, 0, 4, 3, 2};
-		reset_modules(ma, ram, sizeof(ram)/sizeof(ram[0]));
-		assert(signal(ma, sequence, 5) == 65210);
+		assert(signal(ram, sizeof(ram)/sizeof(ram[0]), sequence, 5) == 65210);
 	}
 
 	{
@@ -311,8 +295,7 @@ int main(int argc, char *argv[])
 			27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5
 		};
 		int sequence[] = {9,8,7,6,5};
-		reset_modules(ma, ram, sizeof(ram)/sizeof(ram[0]));
-		assert(signal(ma, sequence, 5) == 139629729);
+		assert(signal(ram, sizeof(ram)/sizeof(ram[0]), sequence, 5) == 139629729);
 	}
 
 	{
@@ -322,29 +305,28 @@ int main(int argc, char *argv[])
 			53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10
 		};
 		int sequence[] = {9,7,8,5,6};
-		reset_modules(ma, ram, sizeof(ram)/sizeof(ram[0]));
-		assert(signal(ma, sequence, 5) == 18216);
+		assert(signal(ram, sizeof(ram)/sizeof(ram[0]), sequence, 5) == 18216);
 	}
 
-	int *array = NULL;
-	size_t acount = 0;
-	size_t asize = 0;
+	int *program = NULL;
+	size_t pcount = 0;
+	size_t psize = 0;
 
 	int value;
 	while (fscanf(input, "%d,", &value) == 1)
 	{
-		if (acount == asize)
+		if (pcount == psize)
 		{
-			size_t newsize = asize ? asize * 2 : 32;
-			int *newarray = realloc(array, newsize * sizeof(*newarray));
-			if (!newarray)
+			size_t newsize = psize ? psize * 2 : 32;
+			int *newprogram = realloc(program, newsize * sizeof(*newprogram));
+			if (!newprogram)
 			{
 				abort();
 			}
-			asize = newsize;
-			array = newarray;
+			psize = newsize;
+			program = newprogram;
 		}
-		array[acount++] = value;
+		program[pcount++] = value;
 	}
 	fclose(input);
 
@@ -353,8 +335,7 @@ int main(int argc, char *argv[])
 	     p;
 	     p = perm_next(p))
 	{
-		reset_modules(ma, array, acount);
-		int s = signal(ma, p->a, p->size);
+		int s = signal(program, pcount, p->a, p->size);
 		if (maxv < s)
 		{
 			maxv = s;
@@ -367,8 +348,7 @@ int main(int argc, char *argv[])
 	     p;
 	     p = perm_next(p))
 	{
-		reset_modules(ma, array, acount);
-		int s = signal(ma, p->a, p->size);
+		int s = signal(program, pcount, p->a, p->size);
 		if (maxv < s)
 		{
 			maxv = s;
@@ -376,7 +356,6 @@ int main(int argc, char *argv[])
 	}
 	printf("part2: %d\n", maxv);
 
-	free(array);
-	destroy_modules(ma);
+	free(program);
 	return 0;
 }

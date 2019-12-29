@@ -4,8 +4,6 @@ CFLAGS=-Wall -g -ggdb
 
 all: day13
 
-day13.c: queue.h
-
 day13: day13.o
 	$(CC) $(CFLAGS) -o $@ $^
 

@@ -5,8 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "queue.h"
-
 enum
 {
 	/* opcodes */
@@ -39,8 +37,12 @@ struct module
 	int64_t pc;		/* instruction/program counter */
 	int64_t rbp;		/* relative base pointer */
 
-	struct queue input;
-	struct queue *output;
+
+	int64_t inq[32];
+	unsigned ri, wi;
+
+	int64_t outq[32];
+	unsigned ro, wo;
 };
 
 static void module_free(struct module *m)
@@ -59,12 +61,6 @@ static struct module *module_new(size_t msize)
 	{
 		m->ram = calloc(msize, sizeof(m->ram[0]));
 		m->size = msize;
-		m->pc = 0;
-		m->input.r = m->input.w = 0;
-		if (m->output)
-		{
-			m->output->r = m->output->w = 0;
-		}
 	}
 	return m;
 }
@@ -74,19 +70,29 @@ static void module_load(struct module *m, const int64_t *prog, size_t psize)
 	assert(psize < m->size);
 	memset(m->ram, 0, m->size * sizeof(m->ram[0]));
 	memcpy(m->ram, prog, psize * sizeof(m->ram[0]));
-	m->pc = 0;
-	m->rbp = 0;
-	queue_init(&m->input);
+	m->pc = m->rbp = m->ri = m->wi = m->ro = m->wo = 0;
 }
 
-static void module_pipe(struct module *m, struct queue *queue)
+static void module_push_input(struct module *m, int64_t value)
 {
-	m->output = queue;
+	assert(m->ri+32 != m->wi);
+	m->inq[(m->wi++)&31] = value;
 }
 
-static void module_pushinput(struct module *m, int64_t value)
+static int module_input_full(struct module *m)
 {
-	queue_add(&m->input, value);
+	return m->ri+32 == m->wi;
+}
+
+static int64_t module_pop_output(struct module *m)
+{
+	assert(m->ro != m->wo);
+	return m->outq[(m->ro++)&31];
+}
+
+static int module_output_empty(struct module *m)
+{
+	return m->ro == m->wo;
 }
 
 static int64_t address_of(struct module *m, int64_t pos, int mode)
@@ -139,31 +145,23 @@ static int module_execute(struct module *m)
 			break;
 
 		case OP_IN:
-			a = address_of(m, m->pc+1, a_mode);
-			assert(a_mode != IMODE);
-			if (queue_empty(&m->input))
+			if (m->ri == m->wi)
 			{
 				return INPUT_EMPTY;
 			}
-			m->ram[a] = queue_pop(&m->input);
+			a = address_of(m, m->pc+1, a_mode);
+			assert(a_mode != IMODE);
+			m->ram[a] = m->inq[(m->ri++)&31];
 			m->pc += 2;
 			break;
 
 		case OP_OUT:
-			a = address_of(m, m->pc+1, a_mode);
-			if (m->output && !queue_full(m->output))
-			{
-				queue_add(m->output, m->ram[a]);
-			}
-			else if (m->output)
+			if (m->ro+32 == m->wo)
 			{
 				return OUTPUT_FULL;
 			}
-			else
-			{
-				fprintf(stderr, "output discarded %" SCNd64 "\n",
-					m->ram[a]);
-			}
+			a = address_of(m, m->pc+1, a_mode);
+			m->outq[(m->wo++)&31] = m->ram[a];
 			m->pc += 2;
 			break;
 
@@ -260,7 +258,6 @@ struct game
 	char screen[100][100];
 	unsigned width, height;
 	struct module *m;
-	struct queue out;
 	int64_t paddle_x;
 	int64_t ball_x;
 	int64_t score;
@@ -270,7 +267,6 @@ static void game_init(struct game *g)
 {
 	memset(g, 0, sizeof(*g));
 	g->m = module_new(4096);
-	module_pipe(g->m, &g->out);
 }
 
 static void game_reset(struct game *g)
@@ -278,7 +274,6 @@ static void game_reset(struct game *g)
 	memset(g->screen, 0, sizeof(g->screen));
 	g->width = g->height = 0;
 	g->paddle_x = g->ball_x = g->score = 0;
-	memset(&g->out, 0, sizeof(g->out));
 }
 
 static void game_destroy(struct game *g)
@@ -288,11 +283,11 @@ static void game_destroy(struct game *g)
 
 static void update_screen(struct game *g)
 {
-	while (queue_len(&g->out) >= 3)
+	while (g->m->wo - g->m->ro >= 3)
 	{
-		int64_t x = queue_pop(&g->out);
-		int64_t y = queue_pop(&g->out);
-		int64_t id = queue_pop(&g->out);
+		int64_t x = module_pop_output(g->m);
+		int64_t y = module_pop_output(g->m);
+		int64_t id = module_pop_output(g->m);
 		if (x == -1 && y == 0)
 		{
 			g->score = id;
@@ -362,15 +357,15 @@ static void game_run(struct game *g, const int64_t *program, size_t count)
 			height = g->height;
 			if (g->paddle_x < g->ball_x)
 			{
-				module_pushinput(g->m, 1);
+				module_push_input(g->m, 1);
 			}
 			else if (g->paddle_x > g->ball_x)
 			{
-				module_pushinput(g->m, -1);
+				module_push_input(g->m, -1);
 			}
 			else
 			{
-				module_pushinput(g->m, 0);
+				module_push_input(g->m, 0);
 			}
 		}
 	}
@@ -398,6 +393,8 @@ static size_t count_blocks(struct game *g, int64_t type)
 
 int main(int argc, char *argv[])
 {
+	(void)module_output_empty;
+	(void)module_input_full;
 	if (argc < 2)
 	{
 		fprintf(stderr, "Usage: %s <input>\n", argv[0]);

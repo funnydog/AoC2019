@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "queue.h"
-
 #define TABLE_SIZE 1024
 
 struct edge
@@ -133,7 +131,6 @@ static void graph_print(struct graph *g)
 
 static void graph_bfs(struct graph *g, const char *start)
 {
-	struct queue q;
 	for (int i = 0; i < TABLE_SIZE; i++)
 	{
 		for (struct vertex *v = g->vertices[i];
@@ -145,14 +142,15 @@ static void graph_bfs(struct graph *g, const char *start)
 		}
 	}
 
-	queue_init(&q);
+	struct vertex *queue[32];
+	unsigned qr = 0, qw = 0;
 
 	struct vertex *v = graph_find(g, start);
-	queue_add(&q, v);
+	queue[(qw++)&31] = v;
 	v->discovered = 1;
-	while (!queue_empty(&q))
+	while (qr != qw)
 	{
-		v = queue_pop(&q);
+		v = queue[(qr++)&31];
 		/* process early */
 		v->processed = 1;
 		for (struct edge *e = v->edges; e; e = e->next)
@@ -165,12 +163,12 @@ static void graph_bfs(struct graph *g, const char *start)
 			if (!t->discovered)
 			{
 				t->discovered = 1;
-				if (queue_full(&q))
+				if (qr+32 == qw)
 				{
 					fprintf(stderr, "queue full\n");
 					abort();
 				}
-				queue_add(&q, t);
+				queue[(qw++)&31] = t;
 				t->parent = v;
 			}
 		}

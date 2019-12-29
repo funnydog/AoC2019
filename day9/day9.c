@@ -5,8 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "queue.h"
-
 enum
 {
 	/* opcodes */
@@ -27,8 +25,9 @@ enum
 	RMODE = 2,		/* relative index (to rbp) */
 
 	/* state of the execution */
-	WAITING = 0,
-	HALTED = 1,
+	INPUT_EMPTY = 0,
+	OUTPUT_FULL = 1,
+	HALTED = 2,
 };
 
 struct module
@@ -38,8 +37,12 @@ struct module
 	int64_t pc;		/* instruction/program counter */
 	int64_t rbp;		/* relative base pointer */
 
-	struct queue input;
-	struct queue *output;
+
+	int64_t inq[32];
+	unsigned ri, wi;
+
+	int64_t outq[32];
+	unsigned ro, wo;
 };
 
 static void module_free(struct module *m)
@@ -58,12 +61,6 @@ static struct module *module_new(size_t msize)
 	{
 		m->ram = calloc(msize, sizeof(m->ram[0]));
 		m->size = msize;
-		m->pc = 0;
-		m->input.r = m->input.w = 0;
-		if (m->output)
-		{
-			m->output->r = m->output->w = 0;
-		}
 	}
 	return m;
 }
@@ -73,19 +70,29 @@ static void module_load(struct module *m, const int64_t *prog, size_t psize)
 	assert(psize < m->size);
 	memset(m->ram, 0, m->size * sizeof(m->ram[0]));
 	memcpy(m->ram, prog, psize * sizeof(m->ram[0]));
-	m->pc = 0;
-	m->rbp = 0;
-	queue_init(&m->input);
+	m->pc = m->rbp = m->ri = m->ro = m->wi = m->wo = 0;
 }
 
-static void module_pipe(struct module *m, struct module *other)
+static void module_push_input(struct module *m, int64_t value)
 {
-	m->output = &other->input;
+	assert(m->ri + 32 != m->wi);
+	m->inq[(m->wi++)&31] = value;
 }
 
-static void module_pushinput(struct module *m, int64_t value)
+static int module_input_full(struct module *m)
 {
-	queue_add(&m->input, value);
+	return m->ri+32 == m->wi;
+}
+
+static int64_t module_pop_output(struct module *m)
+{
+	assert(m->ro != m->wo);
+	return m->outq[(m->ro++)&31];
+}
+
+static int module_output_empty(struct module *m)
+{
+	return m->ro == m->wo;
 }
 
 static int64_t address_of(struct module *m, int64_t pos, int mode)
@@ -138,27 +145,23 @@ static int module_execute(struct module *m)
 			break;
 
 		case OP_IN:
+			if (m->ri == m->wi)
+			{
+				return INPUT_EMPTY;
+			}
 			a = address_of(m, m->pc+1, a_mode);
 			assert(a_mode != IMODE);
-			if (queue_empty(&m->input))
-			{
-				return WAITING;
-			}
-			m->ram[a] = queue_pop(&m->input);
+			m->ram[a] = m->inq[(m->ri++)&31];
 			m->pc += 2;
 			break;
 
 		case OP_OUT:
+			if (m->ro + 32 == m->wo)
+			{
+				return OUTPUT_FULL;
+			}
 			a = address_of(m, m->pc+1, a_mode);
-			if (m->output && !queue_full(m->output))
-			{
-				queue_add(m->output, m->ram[a]);
-			}
-			else
-			{
-				fprintf(stderr, "output discarded %" SCNd64 "\n",
-					m->ram[a]);
-			}
+			m->outq[(m->wo++)&31] = m->ram[a];
 			m->pc += 2;
 			break;
 
@@ -225,6 +228,8 @@ static int module_execute(struct module *m)
 
 int main(int argc, char *argv[])
 {
+	(void)module_output_empty;
+	(void)module_input_full;
 	if (argc < 2)
 	{
 		fprintf(stderr, "Usage: %s <input>\n", argv[0]);
@@ -240,7 +245,6 @@ int main(int argc, char *argv[])
 
 	struct module *m = module_new(4096);
 	assert(m);
-	module_pipe(m, m);
 
 	/* self checks */
 	{
@@ -249,7 +253,8 @@ int main(int argc, char *argv[])
 		module_execute(m);
 		for (size_t i = 0; i < sizeof(prog)/sizeof(prog[0]); i++)
 		{
-			assert(prog[i] == queue_pop(&m->input));
+			int64_t v = module_pop_output(m);
+			assert(prog[i] == v);
 		}
 	}
 
@@ -257,49 +262,51 @@ int main(int argc, char *argv[])
 		int64_t prog[] = {1102,34915192LL,34915192LL,7,4,7,99,0};
 		module_load(m, prog, sizeof(prog)/sizeof(prog[0]));
 		module_execute(m);
-		assert(snprintf(NULL, 0, "%" SCNd64, queue_pop(&m->input)) == 16);
+		int len = snprintf(NULL, 0, "%" SCNd64, module_pop_output(m));
+		assert(len == 16);
 	}
 
 	{
 		int64_t prog[] = {104,1125899906842624LL,99};
 		module_load(m, prog, sizeof(prog)/sizeof(prog[0]));
 		module_execute(m);
-		assert(queue_pop(&m->input) == prog[1]);
+		int64_t v = module_pop_output(m);
+		assert(prog[1] == v);
 	}
 
-	int64_t *array = NULL;
-	size_t acount = 0;
-	size_t asize = 0;
+	int64_t *program = NULL;
+	size_t pcount = 0;
+	size_t psize = 0;
 
 	int64_t value;
 	while (fscanf(input, "%" SCNd64 ",", &value) == 1)
 	{
-		if (acount == asize)
+		if (pcount == psize)
 		{
-			size_t newsize = asize ? asize * 2 : 32;
-			int64_t *newarray = realloc(array, newsize * sizeof(*newarray));
-			if (!newarray)
+			size_t newsize = psize ? psize * 2 : 32;
+			int64_t *newprogram = realloc(program, newsize * sizeof(*newprogram));
+			if (!newprogram)
 			{
 				abort();
 			}
-			asize = newsize;
-			array = newarray;
+			psize = newsize;
+			program = newprogram;
 		}
-		array[acount++] = value;
+		program[pcount++] = value;
 	}
 	fclose(input);
 
-	module_load(m, array, acount);
-	module_pushinput(m, 1);
+	module_load(m, program, pcount);
+	module_push_input(m, 1);
 	module_execute(m);
-	printf("part1: %" SCNd64 "\n", queue_pop(&m->input));
+	printf("part1: %" SCNd64 "\n", module_pop_output(m));
 
-	module_load(m, array, acount);
-	module_pushinput(m, 2);
+	module_load(m, program, pcount);
+	module_push_input(m, 2);
 	module_execute(m);
-	printf("part2: %" SCNd64 "\n", queue_pop(&m->input));
+	printf("part2: %" SCNd64 "\n", module_pop_output(m));
 
-	free(array);
+	free(program);
 	module_free(m);
 	return 0;
 }
