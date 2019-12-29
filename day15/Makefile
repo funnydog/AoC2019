@@ -7,4 +7,4 @@ all: day15
 day15: day15.o
 
 clean:
-	@rm -f *.o day15
+	rm -f *.o day15

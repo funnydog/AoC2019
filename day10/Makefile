@@ -9,4 +9,4 @@ day10: day10.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
-	@rm -f *.o day10
+	rm -f *.o day10

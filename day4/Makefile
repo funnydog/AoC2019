@@ -5,7 +5,6 @@ CFLAGS=-g -ggdb -Wall
 all: day4
 
 day4: day4.o
-	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	@rm -f *.o day4
+	rm -f *.o day4

@@ -9,4 +9,4 @@ day14: day14.o
 day14b: day14b.o
 
 clean:
-	@rm -f *.o day14 day14b
+	rm -f *.o day14 day14b
