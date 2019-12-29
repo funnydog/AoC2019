@@ -25,10 +25,10 @@ def intprogram(array):
 
     pc = 0
     while True:
-        op = array[pc] % 100
-        a_mode = (array[pc] // 100) % 10
-        b_mode = (array[pc] // 1000) % 10
-        c_mode = (array[pc] // 10000) % 10
+        val, op = divmod(array[pc], 100)
+        val, a_mode = divmod(val, 10)
+        val, b_mode = divmod(val, 10)
+        _, c_mode = divmod(val, 10)
         if op == ADD:
             a = address_of(pc+1, a_mode)
             b = address_of(pc+2, b_mode)

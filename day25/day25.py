@@ -63,10 +63,10 @@ class Module(object):
 
     def execute(self):
         while True:
-            op = self.ram[self.pc] % 100
-            a_mode = (self.ram[self.pc] // 100) % 10
-            b_mode = (self.ram[self.pc] // 1000) % 10
-            c_mode = (self.ram[self.pc] // 10000) % 10
+            val, op = divmod(self.ram[self.pc], 100)
+            val, a_mode = divmod(val, 10)
+            val, b_mode = divmod(val, 10)
+            _, c_mode = divmod(val, 10)
             if op == ADD:
                 a = self.address_of(self.pc+1, a_mode)
                 b = self.address_of(self.pc+2, b_mode)
