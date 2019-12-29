@@ -21,7 +21,7 @@ WAITING = 0                     # the program is waiting for input
 HALTED = 1                      # the program is halted
 
 class Module(object):
-    def __init__(self, size):
+    def __init__(self):
         self.ram = defaultdict(lambda: 0)
         self.pc = 0             # instruction pointer
         self.rbp = 0            # relative base
@@ -125,7 +125,7 @@ class Module(object):
                 assert op, "Unknown opcode"
 
 
-m = Module(4096)
+m = Module()
 ram = [109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99]
 m.load(ram)
 m.execute()

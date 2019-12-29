@@ -21,9 +21,8 @@ WAITING = 0                     # the program is waiting for input
 HALTED = 1                      # the program is halted
 
 class Module(object):
-    def __init__(self, size):
+    def __init__(self):
         self.ram = defaultdict(lambda: 0)
-        self.size = size
         self.pc = 0             # instruction pointer
         self.rbp = 0            # relative base
         self.input = deque()
@@ -135,7 +134,7 @@ program = []
 with open("input", "rt") as file:
     program = [ int(x) for x in file.read().split(",") ]
 
-module = Module(4096)
+module = Module()
 
 def check(x, y):
     global module, program

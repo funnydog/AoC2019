@@ -21,7 +21,7 @@ WAITING = 0                     # the program is waiting for input
 HALTED = 1                      # the program is halted
 
 class Module(object):
-    def __init__(self, size):
+    def __init__(self):
         self.ram = defaultdict(lambda: 0)
         self.pc = 0             # instruction pointer
         self.rbp = 0            # relative base
@@ -134,7 +134,7 @@ def add(a, b):
 class Screen(object):
     def __init__(self):
         self.reset()
-        self.game = Module(4096)
+        self.game = Module()
 
     def reset(self):
         self.screen = {}

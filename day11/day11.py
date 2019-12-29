@@ -21,7 +21,7 @@ WAITING = 0                     # the program is waiting for input
 HALTED = 1                      # the program is halted
 
 class Module(object):
-    def __init__(self, size):
+    def __init__(self):
         self.ram = defaultdict(lambda: 0)
         self.pc = 0             # instruction pointer
         self.rbp = 0            # relative base
@@ -147,7 +147,7 @@ class Hull(object):
         pos = (0,0)
         cdir = (0, -1)
         panel = {}
-        robot = Module(4096)
+        robot = Module()
         robot.load(ram)
         robot.push_input(initial)
         while robot.execute() == WAITING:

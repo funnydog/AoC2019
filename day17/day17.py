@@ -23,9 +23,8 @@ WAITING = 0                     # the program is waiting for input
 HALTED = 1                      # the program is halted
 
 class Module(object):
-    def __init__(self, size):
-        self.ram = [0 for x in range(size)]
-        self.size = size
+    def __init__(self):
+        self.ram = defaultdict(lambda: 0)
         self.pc = 0             # instruction pointer
         self.rbp = 0            # relative base
         self.input = deque()
@@ -34,8 +33,9 @@ class Module(object):
         self.logfile = None
 
     def load(self, program):
-        self.ram = program[:]
-        self.ram.extend([0 for x in range(self.size - len(program))])
+        self.ram.clear()
+        for i, v in enumerate(program):
+            self.ram[i] = v
         self.pc = 0
         self.rbp = 0
         self.input.clear()
@@ -159,7 +159,7 @@ class Map(object):
         self.startpos = None
         self.startdir = None
         self.height = None
-        self.module = Module(65536)
+        self.module = Module()
         if echo:
             self.module.log(sys.stdout)
 

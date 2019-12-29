@@ -22,9 +22,8 @@ WAITING = 0                     # the program is waiting for input
 HALTED = 1                      # the program is halted
 
 class Module(object):
-    def __init__(self, size):
+    def __init__(self):
         self.ram = defaultdict(lambda: 0)
-        self.size = size
         self.pc = 0             # instruction pointer
         self.rbp = 0            # relative base
         self.input = deque()
@@ -182,14 +181,13 @@ class Map(object):
     ])
 
     def __init__(self, program):
-        self.module = Module(0)
+        self.module = Module()
         self.module.log(sys.stdout)
         self.module.load(program)
         self.locations = {}
         self.target = {}
         self.door = None
         self.collected = []
-
 
     def readline(self):
         lst = []
